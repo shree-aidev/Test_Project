@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  rag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    container_name: rag-healthcare-chat
+    
+    ports:
+      - "8000:8000"
+    
+    volumes:
+      - ./data:/app/data
+      - ./chroma_store:/app/chroma_store
+      - ./models:/app/models
+    
+    environment:
+      - LLAMA_MODEL_PATH=/app/models/llama-model
+      - CHROMA_DB_PATH=/app/chroma_store
+      - PDF_DATA_FOLDER=/app/data
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - API_DEBUG=false
+      - TEMPERATURE=0.7
+      - MAX_TOKENS=500
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - COLLECTION_NAME=Humana_chat_docs
+      - CHUNK_SIZE=1000
+      - CHUNK_OVERLAP=200
+      - MAX_PDF_SIZE_MB=50
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    networks:
+      - rag-network
+    
+    labels:
+      - "com.healthcare.app=rag-chat"
+      - "version=1.0.0"
+
+networks:
+  rag-network:
+    driver: bridge

@@ -1,0 +1,41 @@
+# RAG Healthcare Chat Application - Python Dependencies
+
+# FastAPI and Web Server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==1.10.13
+python-multipart==0.0.6
+
+# PDF Processing
+pypdf==3.17.1
+
+# LLM and Embeddings
+sentence-transformers==3.0.1
+torch==2.2.2
+huggingface-hub==0.21.4
+
+# Vector Database
+chromadb==1.5.5
+
+# LLM Integration (Llama)
+# llama-cpp-python==0.2.20  # Uncomment when local Llama model is ready
+
+# Text Processing
+langchain==0.0.300
+
+# Environment and Configuration
+python-dotenv==1.0.0
+
+# Logging and Monitoring
+structlog==24.1.0
+
+# Development and Testing
+pytest==8.0.0
+pytest-asyncio==0.23.0
+httpx==0.27.0
+black==24.1.0
+flake8==7.0.0
+mypy==1.8.0
+
+# Production
+gunicorn==21.2.0
