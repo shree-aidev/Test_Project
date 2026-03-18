@@ -1,15 +1,13 @@
 """
 Document ingestion module for RAG application.
-
-Handles PDF loading, text extraction, and chunking using LangChain's
-RecursiveCharacterTextSplitter with comprehensive error handling.
+Handles PDF loading, text extraction, and chunking.
+No LangChain dependency — custom text splitter implementation.
 """
 
 import os
 from pathlib import Path
 from typing import List
 from pypdf import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 
 class DocumentIngestionError(Exception):
@@ -19,73 +17,79 @@ class DocumentIngestionError(Exception):
 
 def validate_pdf_file(file_path: str, max_size_mb: int = 50) -> None:
     """
-    Validate that a PDF file exists and meets size requirements.
+    Validate PDF file exists and meets size requirements.
     
     Args:
-        file_path: Path to the PDF file
-        max_size_mb: Maximum allowed file size in megabytes
+        file_path: Path to PDF file
+        max_size_mb: Maximum allowed file size in MB
         
     Raises:
-        DocumentIngestionError: If file doesn't exist or exceeds size limit
+        DocumentIngestionError: If validation fails
     """
+    # Check file exists
     if not os.path.exists(file_path):
         raise DocumentIngestionError(f"PDF file not found: {file_path}")
     
+    # Check file is PDF
     if not file_path.lower().endswith('.pdf'):
         raise DocumentIngestionError(f"File is not a PDF: {file_path}")
     
+    # Check file size
     file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
     if file_size_mb > max_size_mb:
         raise DocumentIngestionError(
-            f"PDF file exceeds size limit ({file_size_mb:.2f}MB > {max_size_mb}MB)"
+            f"PDF exceeds size limit ({file_size_mb:.2f}MB > {max_size_mb}MB)"
         )
 
 
 def extract_text_from_pdf(file_path: str) -> str:
     """
-    Extract text content from all pages of a PDF document.
+    Extract text from all pages of a PDF document.
     
     Args:
-        file_path: Path to the PDF file
+        file_path: Path to PDF file
         
     Returns:
-        Extracted text from all pages
+        Full extracted text string
         
     Raises:
-        DocumentIngestionError: If PDF reading fails or no text is extracted
+        DocumentIngestionError: If extraction fails
     """
     try:
         validate_pdf_file(file_path)
         
-        pdf_reader = PdfReader(file_path)
+        reader = PdfReader(file_path)
         
-        if len(pdf_reader.pages) == 0:
-            raise DocumentIngestionError("PDF file contains no pages")
+        # Check PDF has pages
+        if len(reader.pages) == 0:
+            raise DocumentIngestionError("PDF contains no pages")
         
         extracted_text = ""
         
-        for page_num, page in enumerate(pdf_reader.pages, 1):
+        # Loop through every page and extract text
+        for page_num, page in enumerate(reader.pages, 1):
             try:
                 page_text = page.extract_text()
                 if page_text:
+                    # Add page marker for context
                     extracted_text += f"\n--- Page {page_num} ---\n{page_text}"
                 else:
-                    # Log warning but continue processing
-                    print(f"Warning: No text extracted from page {page_num}")
+                    print(f"Warning: No text on page {page_num}")
             except Exception as e:
                 raise DocumentIngestionError(
-                    f"Failed to extract text from page {page_num}: {str(e)}"
+                    f"Failed to extract page {page_num}: {str(e)}"
                 )
         
+        # Validate we got something
         if not extracted_text.strip():
-            raise DocumentIngestionError("No text content extracted from PDF")
+            raise DocumentIngestionError("No text extracted from PDF")
         
         return extracted_text
         
     except DocumentIngestionError:
         raise
     except Exception as e:
-        raise DocumentIngestionError(f"Unexpected error during PDF extraction: {str(e)}")
+        raise DocumentIngestionError(f"PDF extraction error: {str(e)}")
 
 
 def chunk_text(
@@ -94,23 +98,22 @@ def chunk_text(
     chunk_overlap: int = 200
 ) -> List[str]:
     """
-    Split text into chunks using RecursiveCharacterTextSplitter.
-    
-    This approach preserves semantic boundaries by splitting on paragraphs,
-    sentences, and words in that order.
+    Split text into overlapping chunks.
+    Custom implementation — no LangChain needed.
     
     Args:
-        text: The text content to chunk
-        chunk_size: Maximum size of each chunk in characters
-        chunk_overlap: Number of characters to overlap between chunks
+        text: Text to split
+        chunk_size: Max characters per chunk
+        chunk_overlap: Overlapping characters between chunks
         
     Returns:
         List of text chunks
         
     Raises:
-        DocumentIngestionError: If chunking fails or produces no chunks
+        DocumentIngestionError: If chunking fails
     """
     try:
+        # Validate inputs
         if not text or not text.strip():
             raise DocumentIngestionError("Input text is empty")
         
@@ -122,16 +125,28 @@ def chunk_text(
                 "chunk_overlap must be less than chunk_size"
             )
         
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            separators=["\n\n", "\n", ". ", " ", ""]
-        )
+        chunks = []
+        start = 0
+        text_length = len(text)
         
-        chunks = splitter.split_text(text)
+        # Slide through text with overlap
+        while start < text_length:
+            # Get end position of this chunk
+            end = start + chunk_size
+            
+            # Get the chunk
+            chunk = text[start:end]
+            
+            # Only add non-empty chunks
+            if chunk.strip():
+                chunks.append(chunk.strip())
+            
+            # Move start forward by chunk_size minus overlap
+            # This creates the overlap between consecutive chunks
+            start += chunk_size - chunk_overlap
         
         if not chunks:
-            raise DocumentIngestionError("No chunks produced from text splitting")
+            raise DocumentIngestionError("No chunks produced")
         
         return chunks
         
@@ -148,34 +163,34 @@ def ingest_document(
     max_file_size_mb: int = 50
 ) -> List[str]:
     """
-    Main ingestion pipeline: load PDF, extract text, and chunk document.
+    Main pipeline — load PDF, extract text, chunk it.
     
     Args:
-        file_path: Path to the PDF file
-        chunk_size: Maximum size of each chunk in characters
-        chunk_overlap: Number of characters to overlap between chunks
-        max_file_size_mb: Maximum allowed file size in megabytes
+        file_path: Path to PDF file
+        chunk_size: Max characters per chunk
+        chunk_overlap: Overlap between chunks
+        max_file_size_mb: Max allowed file size
         
     Returns:
-        List of processed text chunks ready for embedding
+        List of text chunks ready for embedding
         
     Raises:
-        DocumentIngestionError: If any step in the pipeline fails
+        DocumentIngestionError: If any step fails
     """
     try:
-        print(f"Starting document ingestion: {file_path}")
+        print(f"Starting ingestion: {file_path}")
         
-        # Validate file
+        # Step 1 — validate file
         validate_pdf_file(file_path, max_file_size_mb)
-        print(f"✓ File validation passed")
+        print(f"✓ File validated")
         
-        # Extract text
+        # Step 2 — extract text
         text = extract_text_from_pdf(file_path)
         print(f"✓ Text extracted ({len(text)} characters)")
         
-        # Chunk text
+        # Step 3 — chunk text
         chunks = chunk_text(text, chunk_size, chunk_overlap)
-        print(f"✓ Text chunked into {len(chunks)} chunks")
+        print(f"✓ Created {len(chunks)} chunks")
         
         return chunks
         
@@ -183,20 +198,18 @@ def ingest_document(
         print(f"✗ Ingestion failed: {str(e)}")
         raise
     except Exception as e:
-        error_msg = f"Unexpected error during document ingestion: {str(e)}"
+        error_msg = f"Unexpected ingestion error: {str(e)}"
         print(f"✗ {error_msg}")
         raise DocumentIngestionError(error_msg)
 
 
 if __name__ == "__main__":
-    # Example usage
     import sys
     if len(sys.argv) > 1:
-        pdf_path = sys.argv[1]
         try:
-            chunks = ingest_document(pdf_path)
-            print(f"\nSuccessfully ingested {len(chunks)} chunks")
-            print(f"First chunk preview: {chunks[0][:200]}...")
+            chunks = ingest_document(sys.argv[1])
+            print(f"\n✓ Successfully created {len(chunks)} chunks")
+            print(f"Preview: {chunks[0][:200]}...")
         except DocumentIngestionError as e:
             print(f"Error: {e}")
     else:

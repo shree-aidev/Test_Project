@@ -90,12 +90,11 @@ class RAGPipeline:
             
             embeddings = self.embedding_model.encode(
                 texts,
-                convert_to_numpy=False,
+                convert_to_numpy=True,
                 show_progress_bar=False
             )
             
-            return embeddings.tolist() if hasattr(embeddings, 'tolist') else embeddings
-            
+            return embeddings.tolist()
         except Exception as e:
             raise RAGError(f"Embedding generation failed: {str(e)}")
     
